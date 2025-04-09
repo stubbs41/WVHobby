@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+.env
+.venv
+env/
+
+# PyInstaller
+dist/
+build/
+*.spec
+
+# Project specific
+po_formatter.ini
+sample/
+# *.exe  # Commented out to allow exe files
+*.app
+.DS_Store
+# PO_Formatter.exe  # Commented out to allow PO_Formatter.exe
+
+# OS specific
+Thumbs.db 

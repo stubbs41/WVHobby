@@ -1,0 +1,54 @@
+name: Build PO Formatter
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Verify image exists
+      run: |
+        if (-Not (Test-Path -Path "Images/POChange.png")) {
+          Write-Error "Error: Images/POChange.png not found!"
+          exit 1
+        }
+        
+    - name: Build executable
+      run: |
+        python build.py
+        
+    - name: Upload executable
+      uses: actions/upload-artifact@v3
+      with:
+        name: PO_Formatter-Windows
+        path: PO_Formatter.exe
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: PO_Formatter.exe
+        name: PO Formatter ${{ github.ref_name }}
+        body: |
+          Release of PO Formatter ${{ github.ref_name }}
+          
+          Please download the executable for your platform.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

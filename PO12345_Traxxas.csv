@@ -1,0 +1,6 @@
+Item,Description,Quantity,Price,UOM,Category,Vendor_SKU
+1001,Widget A - Small,10,12.99,EA,Hardware,V-1001
+1002,Widget B - Medium,5,24.5,EA,Hardware,V-1002
+1003,Widget C - Large,8,34.75,EA,Hardware,V-1003
+1004,Special Tool Kit,2,149.99,KIT,Tools,V-1004
+1005,Maintenance Supplies,3,89.5,BOX,Maintenance,V-1005
