@@ -646,11 +646,17 @@ class POFormatter(QMainWindow):
                 with open(file_path, 'w') as f:
                     f.write('\n'.join(lines))
             elif use_tab_format:
-                # Save as tab-delimited text file
-                formatted_df.to_csv(file_path, sep='\t', index=False)
+                # Save as tab-delimited text file without headers
+                with open(file_path, 'w') as f:
+                    # Write each row without headers
+                    for _, row in formatted_df.iterrows():
+                        f.write(f"{row['Sku']}\t{row['Qty']}\n")
             else:
-                # Save as CSV
-                formatted_df.to_csv(file_path, index=False)
+                # Save as CSV without headers
+                with open(file_path, 'w') as f:
+                    # Write each row without headers
+                    for _, row in formatted_df.iterrows():
+                        f.write(f"{row['Sku']},{row['Qty']}\n")
                 
             return file_path
             

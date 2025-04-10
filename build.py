@@ -69,7 +69,11 @@ def main():
     # Clean previous build files if they exist
     if dist_dir.exists():
         print("Cleaning previous build...")
-        shutil.rmtree(dist_dir)
+        try:
+            shutil.rmtree(dist_dir)
+        except PermissionError:
+            print("Warning: Could not remove previous build directory due to permissions.")
+            print("Some files might be in use. Continuing with build anyway...")
     
     # Run PyInstaller
     print("Building executable with PyInstaller...")
@@ -96,8 +100,20 @@ def main():
     print("Executable location: dist/PO_Formatter.exe")
     
     # Copy the executable to the root directory for easy access
-    shutil.copy2(os.path.join("dist", "PO_Formatter.exe"), "PO_Formatter.exe")
-    print("Executable copied to the root directory as PO_Formatter.exe")
+    try:
+        if os.path.exists("PO_Formatter.exe"):
+            try:
+                os.remove("PO_Formatter.exe")
+            except PermissionError:
+                print("Warning: Could not replace existing executable in root directory.")
+                print("The executable may be in use. Please use the one in the dist directory.")
+                return
+        
+        shutil.copy2(os.path.join("dist", "PO_Formatter.exe"), "PO_Formatter.exe")
+        print("Executable copied to the root directory as PO_Formatter.exe")
+    except Exception as e:
+        print(f"Warning: Could not copy executable to root directory: {str(e)}")
+        print("Please use the executable in the dist directory.")
 
 if __name__ == "__main__":
     main()
