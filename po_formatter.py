@@ -462,12 +462,12 @@ class POFormatter(QMainWindow):
     def format_hrp(self, po_number):
         """
         Format for HRP
-        Expected format: CSV or TXT with columns:
+        Expected format: CSV with columns:
         - PART # (SKU)
         - QTY
         - WAREHOUSE(Optional)
         
-        Output: Tab-delimited text file or CSV file
+        Output: CSV file only
         """
         try:
             processed_df = self.df.copy()
@@ -504,33 +504,11 @@ class POFormatter(QMainWindow):
             # Add empty WAREHOUSE column - will use user's default warehouse
             hrp_df['WAREHOUSE(Optional)'] = ""
             
-            # Ask user for format preference
-            format_dialog = QMessageBox()
-            format_dialog.setWindowTitle("Choose Output Format")
-            format_dialog.setText("Choose the output format for HRP:")
-            format_dialog.setIcon(QMessageBox.Question)
-            
-            csv_button = format_dialog.addButton("CSV", QMessageBox.ActionRole)
-            txt_button = format_dialog.addButton("TXT (Tab-delimited)", QMessageBox.ActionRole)
-            cancel_button = format_dialog.addButton(QMessageBox.Cancel)
-            
-            format_dialog.exec()
-            
-            if format_dialog.clickedButton() == cancel_button:
-                raise ValueError("Format selection cancelled by user")
-            
-            use_txt_format = format_dialog.clickedButton() == txt_button
-            
             # Ask user where to save the file
             # Use last output directory if available, otherwise use input directory
             start_dir = self.last_output_dir if self.last_output_dir else self.last_input_dir
-            
-            if use_txt_format:
-                default_name = f"{po_number}_HRP.txt"
-                file_filter = 'Text Files (*.txt)'
-            else:
-                default_name = f"{po_number}_HRP.csv"
-                file_filter = 'CSV Files (*.csv)'
+            default_name = f"{po_number}_HRP.csv"
+            file_filter = 'CSV Files (*.csv)'
                 
             start_path = os.path.join(start_dir, default_name) if start_dir else default_name
             
@@ -545,13 +523,8 @@ class POFormatter(QMainWindow):
             self.last_output_dir = os.path.dirname(file_path)
             self.save_settings()
             
-            # Save in requested format
-            if use_txt_format:
-                # Save as tab-delimited text file
-                hrp_df.to_csv(file_path, sep='\t', index=False)
-            else:
-                # Save as CSV
-                hrp_df.to_csv(file_path, index=False)
+            # Save as CSV
+            hrp_df.to_csv(file_path, index=False)
                 
             return file_path
             
