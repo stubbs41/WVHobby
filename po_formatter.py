@@ -619,19 +619,8 @@ class POFormatter(QMainWindow):
                     has_variants = True
                     break
             
-            # Ask user if they want to use the variant template
-            use_template_format = False
-            if has_variants:
-                variant_dialog = QMessageBox()
-                variant_dialog.setWindowTitle("Color Variants Detected")
-                variant_dialog.setText("Color variants detected in SKUs. Use template format with variant field?")
-                variant_dialog.setIcon(QMessageBox.Question)
-                
-                yes_button = variant_dialog.addButton("Yes", QMessageBox.YesRole)
-                no_button = variant_dialog.addButton("No", QMessageBox.NoRole)
-                
-                variant_dialog.exec()
-                use_template_format = variant_dialog.clickedButton() == yes_button
+            # Determine format based on whether variants were detected
+            use_template_format = has_variants
             
             # Create the output dataframe based on selected format
             if use_template_format:
@@ -650,27 +639,8 @@ class POFormatter(QMainWindow):
                         match = re.search(color_pattern, sku)
                         if match:
                             color_code = match.group(1)
-                            # Convert color codes to full color names
-                            if color_code == "RED":
-                                variant = "Red"
-                            elif color_code == "GRN":
-                                variant = "Green"
-                            elif color_code == "BLU" or color_code == "BLUE":
-                                variant = "Blue"
-                            elif color_code == "YEL":
-                                variant = "Yellow"
-                            elif color_code == "BLK":
-                                variant = "Black"
-                            elif color_code == "WHT":
-                                variant = "White"
-                            elif color_code == "PNK":
-                                variant = "Pink"
-                            elif color_code == "PUR":
-                                variant = "Purple"
-                            elif color_code == "ORG":
-                                variant = "Orange"
-                            else:
-                                variant = color_code  # Use code as is if not recognized
+                            # Keep the original color code as the variant
+                            variant = color_code
                             
                             # Remove the color code from the SKU
                             sku = sku.rsplit('-', 1)[0]

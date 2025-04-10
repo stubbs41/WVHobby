@@ -110,4 +110,54 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - Built with PySide6 (Qt for Python)
-- Uses pandas for Excel and CSV processing 
+- Uses pandas for Excel and CSV processing
+
+# Local Supabase Setup
+
+This directory contains everything needed to run a local Supabase instance for development.
+
+## Prerequisites
+
+- Docker and Docker Compose installed and running
+- Windows 10 or later
+
+## Getting Started
+
+1. Start Supabase services:
+   ```
+   start-supabase.bat
+   ```
+
+2. Access Supabase Studio:
+   Open your browser and go to http://localhost:3000
+
+3. Stop Supabase services:
+   ```
+   stop-supabase.bat
+   ```
+
+## API Endpoints
+
+- REST API: http://localhost:8000/rest/v1
+- GraphQL: http://localhost:8000/graphql/v1
+- Auth: http://localhost:8000/auth/v1
+
+## Environment Variables
+
+The `.env` file contains all configuration settings. For production use, you should change:
+- `POSTGRES_PASSWORD`
+- `JWT_SECRET`
+- `ANON_KEY`
+- `SERVICE_ROLE_KEY`
+
+## Database Persistence
+
+All database data is stored in the `volumes/db` directory for persistence between restarts.
+
+## Troubleshooting
+
+If you encounter any issues:
+1. Check Docker is running
+2. Stop all services with `stop-supabase.bat`
+3. Start services again with `start-supabase.bat`
+4. Check Docker logs: `docker-compose logs` 
