@@ -297,10 +297,13 @@ class POFormatter(QMainWindow):
     def format_horizon_fastserve(self, po_number):
         """
         Format for HorizonHobby/FastServe
-        Expected format: PO# / SKU1 / Qty1 / SKU2 / Qty2 / ... / END / SkuCount
-        Output file: FastServe-[PONumber].txt
+        Expected format:
+        - Line 1: PO number
+        - Following lines: Alternating SKU and quantity lines
+        - Second-to-last line: "end" (lowercase)
+        - Last line: Count of SKUs
         
-        Can process either:
+        Can process:
         1. Excel files with Sku and Qty columns
         2. CSV files with PO_NUMBER, ITEM_NUMBER, DESCRIPTION, QTY, UNIT_PRICE, TOTAL columns
         """
@@ -318,22 +321,33 @@ class POFormatter(QMainWindow):
                 missing_columns = [col for col in required_columns if col not in processed_df.columns]
                 
                 if missing_columns:
-                    raise ValueError(f"Input file missing required columns: {', '.join(missing_columns)}")
-                
-                # Get only the needed columns
-                formatted_df = processed_df[['Sku', 'Qty']]
+                    # Try to find similar column names
+                    sku_columns = [col for col in processed_df.columns if 'sku' in col.lower() or 'item' in col.lower() or 'part' in col.lower()]
+                    qty_columns = [col for col in processed_df.columns if 'qty' in col.lower() or 'quantity' in col.lower()]
+                    
+                    if sku_columns and qty_columns:
+                        # Use the first matching columns
+                        formatted_df = processed_df[[sku_columns[0], qty_columns[0]]].copy()
+                        formatted_df.columns = ['Sku', 'Qty']
+                    else:
+                        raise ValueError(f"Input file missing required columns: {', '.join(missing_columns)}")
+                else:
+                    # Get only the needed columns
+                    formatted_df = processed_df[['Sku', 'Qty']]
             
-            # Create the formatted string content
-            # Start with PO number
-            content = po_number
+            # Create the formatted content as lines
+            # Start with PO number as first line
+            lines = [po_number]
             
-            # Add each SKU and quantity pair
+            # Add each SKU and quantity on separate lines
             for index, row in formatted_df.iterrows():
-                content += f" / {row['Sku']} / {int(row['Qty'])}"
+                lines.append(str(row['Sku']))
+                lines.append(str(int(row['Qty'])))
             
-            # Add the END marker and SKU count
+            # Add the 'end' marker and SKU count - using lowercase 'end' as required
             sku_count = len(formatted_df)
-            content += f" / END / {sku_count}"
+            lines.append("end")
+            lines.append(str(sku_count))
             
             # Ask user where to save the file
             # Use last output directory if available, otherwise use input directory
@@ -352,9 +366,9 @@ class POFormatter(QMainWindow):
             self.last_output_dir = os.path.dirname(file_path)
             self.save_settings()
             
-            # Write content to file
-            with open(file_path, 'w') as f:
-                f.write(content)
+            # Write content to file - ensure proper line endings
+            with open(file_path, 'w', newline='\n') as f:
+                f.write('\n'.join(lines))
             
             return file_path
             
@@ -448,12 +462,12 @@ class POFormatter(QMainWindow):
     def format_hrp(self, po_number):
         """
         Format for HRP
-        Expected format: CSV or TXT with columns:
+        Expected format: CSV with columns:
         - PART # (SKU)
         - QTY
         - WAREHOUSE(Optional)
         
-        Output: Tab-delimited text file or CSV file
+        Output: CSV file only
         """
         try:
             processed_df = self.df.copy()
@@ -490,33 +504,11 @@ class POFormatter(QMainWindow):
             # Add empty WAREHOUSE column - will use user's default warehouse
             hrp_df['WAREHOUSE(Optional)'] = ""
             
-            # Ask user for format preference
-            format_dialog = QMessageBox()
-            format_dialog.setWindowTitle("Choose Output Format")
-            format_dialog.setText("Choose the output format for HRP:")
-            format_dialog.setIcon(QMessageBox.Question)
-            
-            csv_button = format_dialog.addButton("CSV", QMessageBox.ActionRole)
-            txt_button = format_dialog.addButton("TXT (Tab-delimited)", QMessageBox.ActionRole)
-            cancel_button = format_dialog.addButton(QMessageBox.Cancel)
-            
-            format_dialog.exec()
-            
-            if format_dialog.clickedButton() == cancel_button:
-                raise ValueError("Format selection cancelled by user")
-            
-            use_txt_format = format_dialog.clickedButton() == txt_button
-            
             # Ask user where to save the file
             # Use last output directory if available, otherwise use input directory
             start_dir = self.last_output_dir if self.last_output_dir else self.last_input_dir
-            
-            if use_txt_format:
-                default_name = f"{po_number}_HRP.txt"
-                file_filter = 'Text Files (*.txt)'
-            else:
-                default_name = f"{po_number}_HRP.csv"
-                file_filter = 'CSV Files (*.csv)'
+            default_name = f"{po_number}_HRP.csv"
+            file_filter = 'CSV Files (*.csv)'
                 
             start_path = os.path.join(start_dir, default_name) if start_dir else default_name
             
@@ -531,13 +523,8 @@ class POFormatter(QMainWindow):
             self.last_output_dir = os.path.dirname(file_path)
             self.save_settings()
             
-            # Save in requested format
-            if use_txt_format:
-                # Save as tab-delimited text file
-                hrp_df.to_csv(file_path, sep='\t', index=False)
-            else:
-                # Save as CSV
-                hrp_df.to_csv(file_path, index=False)
+            # Save as CSV
+            hrp_df.to_csv(file_path, index=False)
                 
             return file_path
             
@@ -547,76 +534,42 @@ class POFormatter(QMainWindow):
     def format_amain(self, po_number):
         """
         Format for AMAIN
-        Supports three formats as shown in the screenshot:
-        1. HOST file format - A specialized format with PO number and SKU/quantity pairs
-        2. CSV file - Standard CSV format with SKU and quantity
-        3. Tab-delimited - Same as CSV but with tab separators
+        CSV format with SKU, Quantity
         """
         try:
             processed_df = self.df.copy()
             
-            # Check if this is a CSV format with the expected columns
-            if all(col in processed_df.columns for col in ['PO_NUMBER', 'ITEM_NUMBER', 'QTY']):
-                # Use the CSV format columns
-                formatted_df = processed_df[['ITEM_NUMBER', 'QTY']]
-                formatted_df.columns = ['Sku', 'Qty']
-            else:
-                # Check for required columns
-                required_columns = ['Sku', 'Qty']
-                missing_columns = [col for col in required_columns if col not in processed_df.columns]
+            # Check for required columns
+            required_columns = ['Sku', 'Qty']
+            missing_columns = [col for col in required_columns if col not in processed_df.columns]
+            
+            if missing_columns:
+                # Try to find similar column names
+                sku_columns = [col for col in processed_df.columns if 'sku' in col.lower() or 'item' in col.lower() or 'part' in col.lower()]
+                qty_columns = [col for col in processed_df.columns if 'qty' in col.lower() or 'quantity' in col.lower()]
                 
-                if missing_columns:
-                    # Try to find similar column names
-                    sku_columns = [col for col in processed_df.columns if 'sku' in col.lower() or 'item' in col.lower() or 'part' in col.lower()]
-                    qty_columns = [col for col in processed_df.columns if 'qty' in col.lower() or 'quantity' in col.lower()]
-                    
-                    if sku_columns and qty_columns:
-                        # Use the first matching columns
-                        formatted_df = processed_df[[sku_columns[0], qty_columns[0]]].copy()
-                        formatted_df.columns = ['Sku', 'Qty']
-                    else:
-                        raise ValueError(f"Input file missing required columns: {', '.join(missing_columns)}")
+                if sku_columns and qty_columns:
+                    # Use the first matching columns
+                    formatted_df = processed_df[[sku_columns[0], qty_columns[0]]].copy()
+                    formatted_df.columns = ['Sku', 'Qty']
                 else:
-                    # Get only the needed columns
-                    formatted_df = processed_df[['Sku', 'Qty']]
+                    raise ValueError(f"Input file missing required columns: {', '.join(missing_columns)}")
+            else:
+                # Get only the needed columns
+                formatted_df = processed_df[['Sku', 'Qty']]
             
-            # Ask user for format preference
-            format_dialog = QMessageBox()
-            format_dialog.setWindowTitle("Choose Output Format")
-            format_dialog.setText("Choose the output format for AMAIN:")
-            format_dialog.setIcon(QMessageBox.Question)
+            # Make sure Qty is an integer
+            formatted_df['Qty'] = formatted_df['Qty'].astype(int)
             
-            host_button = format_dialog.addButton("HOST", QMessageBox.ActionRole)
-            csv_button = format_dialog.addButton("CSV", QMessageBox.ActionRole)
-            tab_button = format_dialog.addButton("Tab-delimited", QMessageBox.ActionRole)
-            cancel_button = format_dialog.addButton(QMessageBox.Cancel)
-            
-            format_dialog.exec()
-            
-            if format_dialog.clickedButton() == cancel_button:
-                raise ValueError("Format selection cancelled by user")
-            
-            use_host_format = format_dialog.clickedButton() == host_button
-            use_tab_format = format_dialog.clickedButton() == tab_button
-            
+            # CSV format for AMAIN
             # Ask user where to save the file
             # Use last output directory if available, otherwise use input directory
             start_dir = self.last_output_dir if self.last_output_dir else self.last_input_dir
-            
-            if use_host_format:
-                default_name = f"{po_number}_AMAIN.txt"
-                file_filter = 'HOST Files (*.txt)'
-            elif use_tab_format:
-                default_name = f"{po_number}_AMAIN.txt"
-                file_filter = 'Text Files (*.txt)'
-            else:
-                default_name = f"{po_number}_AMAIN.csv"
-                file_filter = 'CSV Files (*.csv)'
-                
+            default_name = f"{po_number}.csv"
             start_path = os.path.join(start_dir, default_name) if start_dir else default_name
             
             file_path, _ = QFileDialog.getSaveFileName(
-                self, 'Save Formatted File', start_path, file_filter
+                self, 'Save Formatted File', start_path, 'CSV Files (*.csv)'
             )
             
             if not file_path:
@@ -626,38 +579,9 @@ class POFormatter(QMainWindow):
             self.last_output_dir = os.path.dirname(file_path)
             self.save_settings()
             
-            # Format and save based on selected format
-            if use_host_format:
-                # Create HOST format file
-                # First line: PO number
-                lines = [f"{po_number} [This is your PO number]"]
-                
-                # Item lines: SKU and quantity for each product
-                for index, row in formatted_df.iterrows():
-                    lines.append(f"{row['Sku']} [Product to Order]")
-                    lines.append(f"{int(row['Qty'])} [Qty to order for {row['Sku']}]")
-                
-                # End line with count
-                sku_count = len(formatted_df)
-                lines.append(f"END [Added to every HOST file, represents END of list]")
-                lines.append(f"{sku_count} [Total number of line items added, not total of any added]")
-                
-                # Write content to file
-                with open(file_path, 'w') as f:
-                    f.write('\n'.join(lines))
-            elif use_tab_format:
-                # Save as tab-delimited text file without headers
-                with open(file_path, 'w') as f:
-                    # Write each row without headers
-                    for _, row in formatted_df.iterrows():
-                        f.write(f"{row['Sku']}\t{row['Qty']}\n")
-            else:
-                # Save as CSV without headers
-                with open(file_path, 'w') as f:
-                    # Write each row without headers
-                    for _, row in formatted_df.iterrows():
-                        f.write(f"{row['Sku']},{row['Qty']}\n")
-                
+            # Save to CSV without index
+            formatted_df.to_csv(file_path, index=False)
+            
             return file_path
             
         except Exception as e:
@@ -666,9 +590,8 @@ class POFormatter(QMainWindow):
     def format_traxxas(self, po_number):
         """
         Format for Traxxas
-        Expected format: CSV with SKUs: Must include "SKU" and "QTY" columns
-        Note: If SKUs start with "tra", this prefix will be automatically removed
-        Output format can be either standard SKU/QTY format or the new template with sku,qty,variant,comment
+        Expected format: CSV with sku, qty columns (and optional variant field for color options)
+        Output: CSV file only
         """
         try:
             processed_df = self.df.copy()
@@ -695,23 +618,20 @@ class POFormatter(QMainWindow):
                 if re.search(color_pattern, sku):
                     has_variants = True
                     break
-                    
-            # Ask user for output format
-            format_dialog = QMessageBox()
-            format_dialog.setWindowTitle("Choose Output Format")
-            format_dialog.setText("Choose the output format for Traxxas:")
-            format_dialog.setIcon(QMessageBox.Question)
             
-            csv_button = format_dialog.addButton("Standard CSV/INV", QMessageBox.ActionRole)
-            template_button = format_dialog.addButton("New Template Format", QMessageBox.ActionRole)
-            cancel_button = format_dialog.addButton(QMessageBox.Cancel)
-            
-            format_dialog.exec()
-            
-            if format_dialog.clickedButton() == cancel_button:
-                raise ValueError("Format selection cancelled by user")
-            
-            use_template_format = format_dialog.clickedButton() == template_button
+            # Ask user if they want to use the variant template
+            use_template_format = False
+            if has_variants:
+                variant_dialog = QMessageBox()
+                variant_dialog.setWindowTitle("Color Variants Detected")
+                variant_dialog.setText("Color variants detected in SKUs. Use template format with variant field?")
+                variant_dialog.setIcon(QMessageBox.Question)
+                
+                yes_button = variant_dialog.addButton("Yes", QMessageBox.YesRole)
+                no_button = variant_dialog.addButton("No", QMessageBox.NoRole)
+                
+                variant_dialog.exec()
+                use_template_format = variant_dialog.clickedButton() == yes_button
             
             # Create the output dataframe based on selected format
             if use_template_format:
@@ -785,12 +705,9 @@ class POFormatter(QMainWindow):
             if use_template_format:
                 default_name = f"{po_number}_Traxxas_Template.csv"
             else:
-                if format_dialog.clickedButton() == csv_button:
-                    default_name = f"{po_number}_Traxxas.csv"
-                else:
-                    default_name = f"{po_number}_Traxxas.inv"
+                default_name = f"{po_number}_Traxxas.csv"
                     
-            file_filter = 'CSV Files (*.csv);;INV Files (*.inv)'
+            file_filter = 'CSV Files (*.csv)'
             start_path = os.path.join(start_dir, default_name) if start_dir else default_name
             
             file_path, _ = QFileDialog.getSaveFileName(
