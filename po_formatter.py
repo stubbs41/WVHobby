@@ -3,6 +3,7 @@ import sys
 import os
 import pandas as pd
 import configparser
+import re
 from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QComboBox, 
                              QPushButton, QFileDialog, QVBoxLayout, QHBoxLayout, 
                              QWidget, QLineEdit, QMessageBox, QFrame)
@@ -661,50 +662,42 @@ class POFormatter(QMainWindow):
         Format for Traxxas
         Expected format: CSV with SKUs: Must include "SKU" and "QTY" columns
         Note: If SKUs start with "tra", this prefix will be automatically removed
+        Output format can be either standard SKU/QTY format or the new template with sku,qty,variant,comment
         """
         try:
             processed_df = self.df.copy()
             
-            # Try to find SKU and QTY columns
-            has_sku = 'Sku' in processed_df.columns
+            # Check for color variants in Item/SKU columns (like RED, GRN, BLUE in the SKU)
+            has_variants = False
             
-            # Prepare the output dataframe
-            if has_sku:
-                # Check for required columns
-                required_columns = ['Sku', 'Qty']
-                missing_columns = [col for col in required_columns if col not in processed_df.columns]
-                
-                if missing_columns:
-                    raise ValueError(f"Input file missing required columns: {', '.join(missing_columns)}")
-                
-                # Select and rename columns for Traxxas format
-                traxxas_df = processed_df[['Sku', 'Qty']]
-                traxxas_df.columns = ['SKU', 'QTY']
-            else:
-                # Try to find similar column names
-                sku_columns = [col for col in processed_df.columns if 'sku' in col.lower() or 'item' in col.lower() or 'part' in col.lower()]
-                qty_columns = [col for col in processed_df.columns if 'qty' in col.lower() or 'quantity' in col.lower()]
-                
-                if sku_columns and qty_columns:
-                    # Use the first matching columns
-                    traxxas_df = processed_df[[sku_columns[0], qty_columns[0]]].copy()
-                    traxxas_df.columns = ['SKU', 'QTY']
-                else:
-                    raise ValueError("Could not find required SKU and QTY columns. File must have columns for item SKU and quantity.")
+            # Try to find relevant columns for processing
+            sku_columns = [col for col in processed_df.columns if 'sku' in col.lower() or 'item' in col.lower() or 'part' in col.lower()]
+            qty_columns = [col for col in processed_df.columns if 'qty' in col.lower() or 'quantity' in col.lower()]
             
-            # Remove "tra" prefix from SKUs if present
-            traxxas_df['SKU'] = traxxas_df['SKU'].astype(str).apply(
-                lambda sku: sku[3:] if sku.lower().startswith('tra') else sku
-            )
+            if not sku_columns or not qty_columns:
+                raise ValueError("Could not find required SKU and QTY columns. File must have columns for item SKU and quantity.")
             
+            # Select the best columns to use
+            sku_col = 'Sku' if 'Sku' in processed_df.columns else sku_columns[0]
+            qty_col = 'Qty' if 'Qty' in processed_df.columns else qty_columns[0]
+            
+            # Check if Item or SKU column has color variants in the format XXXXX-COLOR
+            color_pattern = r'-([A-Z]+)$'  # Matches -RED, -GRN, -BLUE at the end of string
+            sample_skus = processed_df[sku_col].astype(str).tolist()
+            
+            for sku in sample_skus:
+                if re.search(color_pattern, sku):
+                    has_variants = True
+                    break
+                    
             # Ask user for output format
             format_dialog = QMessageBox()
             format_dialog.setWindowTitle("Choose Output Format")
             format_dialog.setText("Choose the output format for Traxxas:")
             format_dialog.setIcon(QMessageBox.Question)
             
-            csv_button = format_dialog.addButton("CSV", QMessageBox.ActionRole)
-            inv_button = format_dialog.addButton("INV", QMessageBox.ActionRole)
+            csv_button = format_dialog.addButton("Standard CSV/INV", QMessageBox.ActionRole)
+            template_button = format_dialog.addButton("New Template Format", QMessageBox.ActionRole)
             cancel_button = format_dialog.addButton(QMessageBox.Cancel)
             
             format_dialog.exec()
@@ -712,19 +705,86 @@ class POFormatter(QMainWindow):
             if format_dialog.clickedButton() == cancel_button:
                 raise ValueError("Format selection cancelled by user")
             
-            use_inv_format = format_dialog.clickedButton() == inv_button
+            use_template_format = format_dialog.clickedButton() == template_button
+            
+            # Create the output dataframe based on selected format
+            if use_template_format:
+                # New template format with sku, qty, variant, comment
+                traxxas_df = pd.DataFrame(columns=['sku', 'qty', 'variant', 'comment'])
+                
+                # Process each row and handle variants
+                rows = []
+                for _, row in processed_df.iterrows():
+                    sku = str(row[sku_col])
+                    qty = row[qty_col]
+                    variant = ""
+                    
+                    # Extract variant from SKU if it exists
+                    if has_variants:
+                        match = re.search(color_pattern, sku)
+                        if match:
+                            color_code = match.group(1)
+                            # Convert color codes to full color names
+                            if color_code == "RED":
+                                variant = "Red"
+                            elif color_code == "GRN":
+                                variant = "Green"
+                            elif color_code == "BLU" or color_code == "BLUE":
+                                variant = "Blue"
+                            elif color_code == "YEL":
+                                variant = "Yellow"
+                            elif color_code == "BLK":
+                                variant = "Black"
+                            elif color_code == "WHT":
+                                variant = "White"
+                            elif color_code == "PNK":
+                                variant = "Pink"
+                            elif color_code == "PUR":
+                                variant = "Purple"
+                            elif color_code == "ORG":
+                                variant = "Orange"
+                            else:
+                                variant = color_code  # Use code as is if not recognized
+                            
+                            # Remove the color code from the SKU
+                            sku = sku.rsplit('-', 1)[0]
+                    
+                    # Remove "tra" prefix from SKUs if present
+                    if sku.lower().startswith('tra'):
+                        sku = sku[3:]
+                        
+                    rows.append({
+                        'sku': sku,
+                        'qty': qty,
+                        'variant': variant,
+                        'comment': ""
+                    })
+                
+                traxxas_df = pd.DataFrame(rows)
+            else:
+                # Standard format (just SKU and QTY)
+                traxxas_df = pd.DataFrame()
+                traxxas_df['SKU'] = processed_df[sku_col].astype(str)
+                traxxas_df['QTY'] = processed_df[qty_col]
+                
+                # Remove "tra" prefix from SKUs if present
+                traxxas_df['SKU'] = traxxas_df['SKU'].apply(
+                    lambda sku: sku[3:] if sku.lower().startswith('tra') else sku
+                )
             
             # Ask user where to save the file
             # Use last output directory if available, otherwise use input directory
             start_dir = self.last_output_dir if self.last_output_dir else self.last_input_dir
             
-            if use_inv_format:
-                default_name = f"{po_number}_Traxxas.inv"
-                file_filter = 'INV Files (*.inv)'
+            if use_template_format:
+                default_name = f"{po_number}_Traxxas_Template.csv"
             else:
-                default_name = f"{po_number}_Traxxas.csv"
-                file_filter = 'CSV Files (*.csv)'
-                
+                if format_dialog.clickedButton() == csv_button:
+                    default_name = f"{po_number}_Traxxas.csv"
+                else:
+                    default_name = f"{po_number}_Traxxas.inv"
+                    
+            file_filter = 'CSV Files (*.csv);;INV Files (*.inv)'
             start_path = os.path.join(start_dir, default_name) if start_dir else default_name
             
             file_path, _ = QFileDialog.getSaveFileName(
@@ -738,7 +798,7 @@ class POFormatter(QMainWindow):
             self.last_output_dir = os.path.dirname(file_path)
             self.save_settings()
             
-            # Save in requested format (INV is basically the same as CSV for SKU format)
+            # Save in requested format
             traxxas_df.to_csv(file_path, index=False)
             return file_path
             
